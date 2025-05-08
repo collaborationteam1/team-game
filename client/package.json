@@ -11,4 +11,11 @@
     "start": "react-scripts start",
     "build": "react-scripts build"
   }
+  "dependencies": {
+  "react": "^18.0.0",
+  "react-dom": "^18.0.0",
+  "socket.io-client": "^4.7.2",
+  "react-scripts": "^5.0.1"
+}
+
 }
