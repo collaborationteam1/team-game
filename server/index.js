@@ -165,7 +165,6 @@ const io = socketIo(server, {
     credentials: true,
     allowedHeaders: ["Content-Type"]
   },
-  transports: ['websocket'],
   pingTimeout: 60000,
   pingInterval: 25000,
   allowEIO3: true,

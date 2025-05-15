@@ -5,7 +5,6 @@ const SOCKET_URL = process.env.NODE_ENV === 'production'
   : 'http://localhost:3001';
 
 export const socket = io(SOCKET_URL, {
-  transports: ['websocket'],
   reconnection: true,
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
