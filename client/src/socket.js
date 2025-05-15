@@ -20,7 +20,9 @@ export const socket = io(SOCKET_URL, {
   ackTimeout: 10000,
   retries: 3,
   secure: true,
-  transports: ['polling', 'websocket'],
+  transports: ['polling'],
+  upgrade: true,
+  rememberUpgrade: true,
   extraHeaders: {
     'Content-Type': 'application/json'
   }

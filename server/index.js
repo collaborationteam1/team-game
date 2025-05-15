@@ -3,7 +3,6 @@ const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const crypto = require('crypto');
-const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
@@ -125,16 +124,28 @@ function updateGameState(roomCode) {
 }
 
 // Enable CORS for all routes
-app.use(cors({
-  origin: [
+app.use((req, res, next) => {
+  const allowedOrigins = [
     'http://localhost:3000',
     'https://team-game.vercel.app',
     'https://team-game-beta.vercel.app'
-  ],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-  credentials: true
-}));
+  ];
+  const origin = req.headers.origin;
+  
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
@@ -170,9 +181,11 @@ const io = socketIo(server, {
       'https://team-game.vercel.app',
       'https://team-game-beta.vercel.app'
     ],
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type'],
     credentials: true,
-    allowedHeaders: ['Content-Type']
+    preflightContinue: false,
+    optionsSuccessStatus: 204
   },
   transports: ['polling', 'websocket'],
   allowEIO3: true,
