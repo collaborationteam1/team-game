@@ -123,21 +123,35 @@ function updateGameState(roomCode) {
   return state;
 }
 
-// Enable CORS for all routes
+// CORS middleware - must be first
 app.use((req, res, next) => {
   // Log request details for debugging
   console.log('Request received:', {
     method: req.method,
     url: req.url,
     origin: req.headers.origin,
-    host: req.headers.host
+    host: req.headers.host,
+    headers: req.headers
   });
 
   // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  const allowedOrigins = [
+    'https://team-game.vercel.app',
+    'https://team-game-beta.vercel.app',
+    'http://localhost:3000'
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -177,10 +191,11 @@ app.get('/health', (req, res) => {
 
 const io = socketIo(server, {
   cors: {
-    origin: (origin, callback) => {
-      console.log('Socket.IO CORS origin:', origin);
-      callback(null, true); // Allow all origins
-    },
+    origin: [
+      'https://team-game.vercel.app',
+      'https://team-game-beta.vercel.app',
+      'http://localhost:3000'
+    ],
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -191,7 +206,9 @@ const io = socketIo(server, {
   allowEIO3: true,
   path: '/socket.io/',
   connectTimeout: 10000,
-  ackTimeout: 10000
+  ackTimeout: 10000,
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 // Add detailed Socket.IO logging

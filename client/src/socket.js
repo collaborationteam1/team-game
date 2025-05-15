@@ -15,15 +15,17 @@ export const socket = io(SOCKET_URL, {
   reconnectionDelayMax: 5000,
   timeout: 20000,
   autoConnect: true,
-  withCredentials: false,
+  withCredentials: true,
   forceNew: true,
   path: '/socket.io/',
   ackTimeout: 10000,
   retries: 3,
   secure: true,
-  transports: ['polling'],  // Start with polling only
+  transports: ['polling', 'websocket'],
   upgrade: true,
   rememberUpgrade: true,
+  pingTimeout: 60000,
+  pingInterval: 25000,
   extraHeaders: {
     'Content-Type': 'application/json'
   }
