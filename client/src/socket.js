@@ -4,6 +4,9 @@ const SOCKET_URL = process.env.NODE_ENV === 'production'
   ? 'https://team-game-server.onrender.com'
   : 'http://localhost:3001';
 
+console.log('Environment:', process.env.NODE_ENV);
+console.log('Socket URL:', SOCKET_URL);
+
 export const socket = io(SOCKET_URL, {
   reconnection: true,
   reconnectionAttempts: 5,
@@ -23,20 +26,35 @@ export const socket = io(SOCKET_URL, {
   }
 });
 
-// Add connection status logging
+// Enhanced connection status logging
 socket.on('connect', () => {
-  console.log('Connected to server with ID:', socket.id);
+  console.log('=== Socket Connected ===');
+  console.log('Socket ID:', socket.id);
   console.log('Transport:', socket.io.engine.transport.name);
   console.log('Socket state:', socket.connected ? 'connected' : 'disconnected');
   console.log('Socket rooms:', socket.rooms);
+  console.log('Socket options:', socket.io.opts);
+  console.log('Engine state:', {
+    transport: socket.io.engine.transport.name,
+    readyState: socket.io.engine.readyState,
+    protocol: socket.io.engine.protocol,
+    upgrades: socket.io.engine.upgrades
+  });
 });
 
 socket.on('connect_error', (error) => {
-  console.error('Connection error:', error);
+  console.error('=== Connection Error ===');
+  console.error('Error:', error);
   console.error('Error details:', {
     message: error.message,
     description: error.description,
     type: error.type,
+    transport: socket.io.engine.transport.name,
+    context: error.context
+  });
+  console.error('Socket state:', {
+    connected: socket.connected,
+    id: socket.id,
     transport: socket.io.engine.transport.name
   });
 });

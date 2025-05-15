@@ -139,6 +139,19 @@ app.use(cors({
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Add detailed logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log('Headers:', req.headers);
+  next();
+});
+
+// Add error logging middleware
+app.use((err, req, res, next) => {
+  console.error('Express error:', err);
+  res.status(500).send('Internal Server Error');
+});
+
 // Add basic routes before socket.io setup
 app.get('/', (req, res) => {
   console.log('Root route accessed');
@@ -166,6 +179,25 @@ const io = socketIo(server, {
   path: '/socket.io/',
   connectTimeout: 10000,
   ackTimeout: 10000
+});
+
+// Add detailed Socket.IO logging
+io.engine.on('connection_error', (err) => {
+  console.error('Socket.IO connection error:', {
+    message: err.message,
+    description: err.description,
+    type: err.type,
+    context: err.context
+  });
+});
+
+io.engine.on('initial_headers', (headers, req) => {
+  console.log('Socket.IO initial headers:', headers);
+  console.log('Socket.IO request headers:', req.headers);
+});
+
+io.engine.on('headers', (headers, req) => {
+  console.log('Socket.IO headers:', headers);
 });
 
 // Add error handling
