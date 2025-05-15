@@ -128,15 +128,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Enable CORS for all routes
 app.use((req, res, next) => {
-  const allowedOrigins = [
-    'http://localhost:3000',
-    'https://team-game.vercel.app',
-    'https://team-game-beta.vercel.app'
-  ];
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-  }
+  res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   res.header('Access-Control-Allow-Credentials', 'true');
@@ -156,17 +148,12 @@ app.get('/health', (req, res) => {
 
 const io = socketIo(server, {
   cors: {
-    origin: [
-      "http://localhost:3000",
-      "https://team-game.vercel.app",
-      "https://team-game-beta.vercel.app"
-    ],
+    origin: "*",
     methods: ["GET", "POST"],
     credentials: true,
     allowedHeaders: ["Content-Type"]
   },
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  transports: ['websocket', 'polling'],
   allowEIO3: true,
   path: '/socket.io/',
   connectTimeout: 10000,

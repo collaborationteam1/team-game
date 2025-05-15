@@ -16,7 +16,8 @@ export const socket = io(SOCKET_URL, {
   path: '/socket.io/',
   ackTimeout: 10000,
   retries: 3,
-  secure: true
+  secure: true,
+  transports: ['websocket', 'polling']
 });
 
 // Add connection status logging
