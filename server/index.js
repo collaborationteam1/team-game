@@ -128,11 +128,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Enable CORS for all routes
 app.use((req, res, next) => {
-  const allowedOrigins = [
-    'http://localhost:3000',
-    'https://team-game.vercel.app',
-    'https://team-game-beta.vercel.app'
-  ];
+  const allowedOrigins = ['http://localhost:3000', 'https://team-game.vercel.app'];
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
@@ -156,11 +152,7 @@ app.get('/health', (req, res) => {
 
 const io = socketIo(server, {
   cors: {
-    origin: [
-      "http://localhost:3000",
-      "https://team-game.vercel.app",
-      "https://team-game-beta.vercel.app"
-    ],
+    origin: ["http://localhost:3000", "https://team-game.vercel.app"],
     methods: ["GET", "POST"],
     credentials: true,
     allowedHeaders: ["Content-Type"]
