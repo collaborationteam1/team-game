@@ -21,7 +21,7 @@ export const socket = io(SOCKET_URL, {
   ackTimeout: 10000,
   retries: 3,
   secure: true,
-  transports: ['polling', 'websocket'],
+  transports: ['websocket', 'polling'],
   upgrade: true,
   rememberUpgrade: true,
   pingTimeout: 60000,
@@ -62,6 +62,13 @@ socket.on('connect_error', (error) => {
     id: socket.id,
     transport: socket.io.engine.transport.name
   });
+  
+  // Try to reconnect with different transport if polling fails
+  if (socket.io.engine.transport.name === 'polling') {
+    console.log('Switching to WebSocket transport...');
+    socket.io.opts.transports = ['websocket'];
+    socket.connect();
+  }
 });
 
 socket.on('disconnect', (reason) => {

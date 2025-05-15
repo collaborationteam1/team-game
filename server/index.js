@@ -144,8 +144,6 @@ app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -202,13 +200,20 @@ const io = socketIo(server, {
     preflightContinue: false,
     optionsSuccessStatus: 204
   },
-  transports: ['polling', 'websocket'],
+  transports: ['websocket', 'polling'],
   allowEIO3: true,
   path: '/socket.io/',
   connectTimeout: 10000,
   ackTimeout: 10000,
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  cookie: {
+    name: 'io',
+    path: '/',
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true
+  }
 });
 
 // Add detailed Socket.IO logging
