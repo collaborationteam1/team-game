@@ -2,7 +2,7 @@ import { io } from 'socket.io-client';
 
 // Remove port number from production URL
 const SOCKET_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://team-game-server.onrender.com'  // No port number
+  ? 'https://team-game.onrender.com'  // Correct Render URL
   : 'http://localhost:3001';
 
 console.log('Environment:', process.env.NODE_ENV);
