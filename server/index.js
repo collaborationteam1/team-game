@@ -125,19 +125,11 @@ function updateGameState(roomCode) {
 
 // Enable CORS for all routes
 app.use((req, res, next) => {
-  const allowedOrigins = [
-    'http://localhost:3000',
-    'https://team-game.vercel.app',
-    'https://team-game-beta.vercel.app'
-  ];
-  const origin = req.headers.origin;
-  
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
+  // Allow all origins during development
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -176,13 +168,9 @@ app.get('/health', (req, res) => {
 
 const io = socketIo(server, {
   cors: {
-    origin: [
-      'http://localhost:3000',
-      'https://team-game.vercel.app',
-      'https://team-game-beta.vercel.app'
-    ],
+    origin: '*',
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
     preflightContinue: false,
     optionsSuccessStatus: 204
