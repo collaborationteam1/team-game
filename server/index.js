@@ -125,14 +125,23 @@ function updateGameState(roomCode) {
 
 // Enable CORS for all routes
 app.use((req, res, next) => {
-  // Allow all origins during development
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Log request details for debugging
+  console.log('Request received:', {
+    method: req.method,
+    url: req.url,
+    origin: req.headers.origin,
+    host: req.headers.host
+  });
+
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('Handling OPTIONS request');
     return res.status(200).end();
   }
   
@@ -168,7 +177,10 @@ app.get('/health', (req, res) => {
 
 const io = socketIo(server, {
   cors: {
-    origin: '*',
+    origin: (origin, callback) => {
+      console.log('Socket.IO CORS origin:', origin);
+      callback(null, true); // Allow all origins
+    },
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,

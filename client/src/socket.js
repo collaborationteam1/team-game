@@ -1,7 +1,8 @@
 import { io } from 'socket.io-client';
 
+// Remove port number from production URL
 const SOCKET_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://team-game-server.onrender.com'
+  ? 'https://team-game-server.onrender.com'  // No port number
   : 'http://localhost:3001';
 
 console.log('Environment:', process.env.NODE_ENV);
@@ -20,7 +21,7 @@ export const socket = io(SOCKET_URL, {
   ackTimeout: 10000,
   retries: 3,
   secure: true,
-  transports: ['polling', 'websocket'],
+  transports: ['polling'],  // Start with polling only
   upgrade: true,
   rememberUpgrade: true,
   extraHeaders: {
