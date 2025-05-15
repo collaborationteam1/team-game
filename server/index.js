@@ -165,13 +165,20 @@ const io = socketIo(server, {
     credentials: true,
     allowedHeaders: ["Content-Type"]
   },
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
   pingTimeout: 60000,
   pingInterval: 25000,
   allowEIO3: true,
   path: '/socket.io/',
   connectTimeout: 10000,
-  ackTimeout: 10000
+  ackTimeout: 10000,
+  cookie: {
+    name: 'io',
+    path: '/',
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true
+  }
 });
 
 // Add error handling

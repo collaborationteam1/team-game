@@ -5,7 +5,7 @@ const SOCKET_URL = process.env.NODE_ENV === 'production'
   : 'http://localhost:3001';
 
 export const socket = io(SOCKET_URL, {
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
   reconnection: true,
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
@@ -16,7 +16,9 @@ export const socket = io(SOCKET_URL, {
   forceNew: true,
   path: '/socket.io/',
   ackTimeout: 10000,
-  retries: 3
+  retries: 3,
+  secure: true,
+  rejectUnauthorized: false
 });
 
 // Add connection status logging
