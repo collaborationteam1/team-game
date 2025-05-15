@@ -153,7 +153,7 @@ const io = socketIo(server, {
     credentials: true,
     allowedHeaders: ["Content-Type"]
   },
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
   allowEIO3: true,
   path: '/socket.io/',
   connectTimeout: 10000,
