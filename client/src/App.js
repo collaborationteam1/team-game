@@ -3,6 +3,32 @@ import { socket } from './socket';
 
 const GAME_DURATION_MS = 5 * 60 * 1000;
 
+// Defined outside App so React never remounts them on re-render
+function Input({ value, onChange, placeholder, className = '', ...rest }) {
+  return (
+    <input
+      value={value} onChange={onChange} placeholder={placeholder}
+      className={`w-full bg-reactor-bg border border-reactor-b2 rounded px-3 py-2.5 text-slate-200 font-mono text-sm placeholder-slate-600 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 transition-colors ${className}`}
+      {...rest}
+    />
+  );
+}
+
+function Btn({ onClick, disabled, variant = 'teal', children, className = '' }) {
+  const variants = {
+    teal:  'border-teal-500    text-teal-400    bg-teal-500/10    hover:bg-teal-500/20    hover:shadow-glow-teal',
+    green: 'border-emerald-500 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 hover:shadow-glow-green',
+    red:   'border-rose-500    text-rose-400    bg-rose-500/10    hover:bg-rose-500/20    hover:shadow-glow-red',
+    ghost: 'border-reactor-b2  text-slate-400   bg-transparent    hover:border-slate-500',
+  };
+  return (
+    <button onClick={onClick} disabled={disabled}
+      className={`inline-flex items-center justify-center gap-2 px-4 py-2 border rounded font-mono text-sm uppercase tracking-widest transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 ${variants[variant]} ${className}`}>
+      {children}
+    </button>
+  );
+}
+
 const LEVER_INFO = {
   A: 'Temp +2',
   B: 'Temp −1',
@@ -59,6 +85,7 @@ export default function App() {
   const [loading, setLoading]                   = useState(false);
   const [stabilizeError, setStabilizeError]     = useState('');
   const [timeLeft, setTimeLeft]                 = useState(null);
+  const [copied, setCopied]                     = useState(false);
 
   useEffect(() => {
     if (!gameState?.startTime || gameState.gamePhase !== 'running') { setTimeLeft(null); return; }
@@ -113,32 +140,13 @@ export default function App() {
   const handleExecuteFinalAction = () => { setStabilizeError(''); socket.emit('executeFinalAction', {}, (r) => { if (!r?.success) setStabilizeError(r?.error || 'Fehler'); }); };
 
   const fmt = (ms) => { if (ms === null) return '--:--'; const s = Math.ceil(ms / 1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
-  const timerClass = timeLeft === null ? '' : timeLeft < 30000 ? 'text-rose-400 animate-blink-fast' : timeLeft < 90000 ? 'text-amber-400 animate-blink' : 'text-slate-200';
-
-  // ── Shared input / button primitives ────────────────────────────────────────
-
-  const Input = ({ value, onChange, placeholder, className = '', ...rest }) => (
-    <input
-      value={value} onChange={onChange} placeholder={placeholder}
-      className={`w-full bg-reactor-bg border border-reactor-b2 rounded px-3 py-2.5 text-slate-200 font-mono text-sm placeholder-slate-600 outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 transition-colors ${className}`}
-      {...rest}
-    />
-  );
-
-  const Btn = ({ onClick, disabled, variant = 'teal', children, className = '' }) => {
-    const variants = {
-      teal:    'border-teal-500   text-teal-400   bg-teal-500/10   hover:bg-teal-500/20   hover:shadow-glow-teal',
-      green:   'border-emerald-500 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 hover:shadow-glow-green',
-      red:     'border-rose-500   text-rose-400   bg-rose-500/10   hover:bg-rose-500/20   hover:shadow-glow-red',
-      ghost:   'border-reactor-b2 text-slate-400  bg-transparent   hover:border-slate-500',
-    };
-    return (
-      <button onClick={onClick} disabled={disabled}
-        className={`inline-flex items-center justify-center gap-2 px-4 py-2 border rounded font-mono text-sm uppercase tracking-widest transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 ${variants[variant]} ${className}`}>
-        {children}
-      </button>
-    );
+  const copyRoomCode = () => {
+    navigator.clipboard.writeText(currentRoom).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
+  const timerClass = timeLeft === null ? '' : timeLeft < 30000 ? 'text-rose-400 animate-blink-fast' : timeLeft < 90000 ? 'text-amber-400 animate-blink' : 'text-slate-200';
 
   // ── End screens ──────────────────────────────────────────────────────────────
 
@@ -441,7 +449,14 @@ export default function App() {
             {/* Room header */}
             <div className="flex items-center justify-between flex-wrap gap-3 px-5 py-3 bg-reactor-surface border border-reactor-border rounded-lg">
               <div className="flex items-center gap-4 flex-wrap">
-                <span className="font-display text-lg font-bold text-teal-400 tracking-widest">#{currentRoom}</span>
+                <button onClick={copyRoomCode}
+                  className="flex items-center gap-2 font-display text-lg font-bold text-teal-400 tracking-widest hover:text-teal-300 transition-colors"
+                  title="Klicken zum Kopieren">
+                  #{currentRoom}
+                  <span className="text-xs font-mono font-normal tracking-wide text-slate-500">
+                    {copied ? '✓ kopiert' : '⎘'}
+                  </span>
+                </button>
                 {role && <span className={roleBadge(role)}>{role}</span>}
               </div>
               <div className="flex items-center gap-4">

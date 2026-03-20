@@ -15,6 +15,12 @@
   user-select: none;
 }
 
+/* Allow text selection in inputs and on explicit selectable elements */
+input, textarea, [data-selectable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 html {
   -webkit-filter: none;
   filter: none;
