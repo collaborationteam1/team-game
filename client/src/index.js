@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-// import './index.css';  // Falls eine Stylesheet-Datei vorhanden ist
+import './index.css';
 import App from './App'; // Die Haupt-App-Komponente
 
 const container = document.getElementById('root');
