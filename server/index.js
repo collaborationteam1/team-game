@@ -7,10 +7,10 @@ const crypto = require('crypto');
 const app = express();
 const server = http.createServer(app);
 
-// Get port from environment variable or use 3001 as fallback
 const PORT = process.env.PORT || 3001;
+const GAME_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const TICK_INTERVAL_MS = 2000;           // 2 seconds per tick
 
-// Spielrollen
 const ROLES = {
   ENGINEER: 'Ingenieur',
   TECHNICIAN: 'Techniker',
@@ -18,173 +18,213 @@ const ROLES = {
   OPERATOR: 'Operator'
 };
 
-// Spielzustand
-const gameState = {
-  temperature: 50, // Starttemperatur
-  pressure: 50,    // Startdruck
-  reactorStatus: 'normal', // normal, warning, critical
-  levers: {
-    A: false,
-    B: false,
-    C: false,
-    D: false
-  },
-  errorMessages: [],
-  statusLights: {
-    red: false,
-    yellow: false,
-    blue: false,
-    green: false
-  },
-  gamePhase: 'setup', // setup, running, completed, failed
-  startTime: null,
-  endTime: null
-};
+const VALID_LEVERS = new Set(['A', 'B', 'C', 'D']);
 
-// Speicherung der aktiven Räume
+// Factory — always returns a fresh, independent game state (no shared references)
+function createGameState() {
+  return {
+    temperature: 20,        // starts too cold — must raise above 30
+    pressure: 75,           // starts too high — must reduce below 70
+    reactorStatus: 'warning',
+    levers: { A: false, B: false, C: false, D: false },
+    errorMessages: [],
+    statusLights: { red: false, yellow: false, blue: false, green: false },
+    gamePhase: 'setup',
+    startTime: null,
+    endTime: null
+  };
+}
+
 const rooms = new Map();
 
-// Funktion zum Generieren eines Raumcodes
 function generateRoomCode() {
   return crypto.randomBytes(2).toString('hex').toUpperCase();
 }
 
-// Funktion zum Aufräumen inaktiver Räume
 function cleanupInactiveRooms() {
   const now = Date.now();
   for (const [roomCode, room] of rooms.entries()) {
-    if (now - room.lastActivity > 30 * 60 * 1000) { // 30 Minuten
+    if (now - room.lastActivity > 30 * 60 * 1000) {
       rooms.delete(roomCode);
-      console.log(`Raum ${roomCode} wurde aufgeräumt wegen Inaktivität`);
+      console.log(`Raum ${roomCode} aufgeräumt wegen Inaktivität`);
     }
   }
 }
+setInterval(cleanupInactiveRooms, 5 * 60 * 1000);
 
-// Regelmäßige Überprüfung auf inaktive Räume
-setInterval(cleanupInactiveRooms, 5 * 60 * 1000); // Alle 5 Minuten prüfen
-
-// Funktion zum Aktualisieren des Spielzustands
 function updateGameState(roomCode) {
   const room = rooms.get(roomCode);
-  if (!room || !room.gameState) return;
+  if (!room || !room.gameState) return null;
 
   const state = room.gameState;
-  
-  // Temperatur und Druck basierend auf Hebel-Positionen
+
+  // Lever effects
   if (state.levers.A) state.temperature += 2;
   if (state.levers.B) state.temperature -= 1;
   if (state.levers.C) state.pressure += 2;
   if (state.levers.D) state.pressure -= 1;
 
-  // Statusleuchten basierend auf Werten
-  state.statusLights.red = state.temperature > 80;
-  state.statusLights.yellow = state.pressure > 70;
-  state.statusLights.blue = state.temperature < 30;
-  state.statusLights.green = state.temperature >= 30 && state.temperature <= 80 && 
-                            state.pressure >= 30 && state.pressure <= 70;
+  // Natural drift — reactor slowly cools and pressure builds without intervention
+  state.temperature -= 0.2;
+  state.pressure += 0.2;
 
-  // Reaktor-Status
+  // Clamp
+  state.temperature = Math.max(0, Math.min(100, state.temperature));
+  state.pressure = Math.max(0, Math.min(100, state.pressure));
+
+  // Status lights
+  state.statusLights.red    = state.temperature > 80;
+  state.statusLights.yellow = state.pressure > 70;
+  state.statusLights.blue   = state.temperature < 30;
+  state.statusLights.green  = state.temperature >= 30 && state.temperature <= 80 &&
+                               state.pressure >= 30 && state.pressure <= 70;
+
+  // Reactor status
   if (state.temperature > 90 || state.pressure > 90) {
     state.reactorStatus = 'critical';
-  } else if (state.temperature > 80 || state.pressure > 80) {
+  } else if (state.temperature > 80 || state.pressure > 80 ||
+             state.temperature < 30 || state.pressure < 30) {
     state.reactorStatus = 'warning';
   } else {
     state.reactorStatus = 'normal';
   }
 
-  // Fehlermeldungen generieren
+  // Error messages
   state.errorMessages = [];
-  if (state.temperature > 80) {
-    state.errorMessages.push('Warnung: Temperatur zu hoch!');
-  }
-  if (state.pressure > 80) {
-    state.errorMessages.push('Warnung: Druck zu hoch!');
-  }
-  if (state.temperature < 30) {
-    state.errorMessages.push('Warnung: Temperatur zu niedrig!');
-  }
-  if (state.pressure < 30) {
-    state.errorMessages.push('Warnung: Druck zu niedrig!');
-  }
+  if (state.temperature > 80) state.errorMessages.push('Warnung: Temperatur zu hoch!');
+  if (state.pressure > 70)    state.errorMessages.push('Warnung: Druck zu hoch!');
+  if (state.temperature < 30) state.errorMessages.push('Warnung: Temperatur zu niedrig!');
+  if (state.pressure < 30)    state.errorMessages.push('Warnung: Druck zu niedrig!');
 
-  // Spielende prüfen
-  if (state.gamePhase === 'running') {
-    if (state.temperature >= 30 && state.temperature <= 80 && 
-        state.pressure >= 30 && state.pressure <= 70 && 
-        state.statusLights.green) {
-      state.gamePhase = 'completed';
-      state.endTime = Date.now();
-    } else if (state.temperature > 95 || state.pressure > 95) {
-      state.gamePhase = 'failed';
-      state.endTime = Date.now();
-    }
+  // Catastrophic failure (hits the ceiling)
+  if (state.gamePhase === 'running' && (state.temperature >= 100 || state.pressure >= 100)) {
+    state.gamePhase = 'failed';
+    state.endTime = Date.now();
   }
 
   return state;
 }
 
-// CORS middleware - must be first
-app.use((req, res, next) => {
-  // Log request details for debugging
-  console.log('Request received:', {
-    method: req.method,
-    url: req.url,
-    origin: req.headers.origin,
-    host: req.headers.host,
-    headers: req.headers
+// Role-specific views — each role only receives what they should know
+function getRoleSpecificState(gameState, role) {
+  const { gamePhase, startTime, endTime } = gameState;
+
+  switch (role) {
+    case ROLES.ENGINEER:
+      return {
+        gamePhase, startTime, endTime,
+        errorMessages: [...gameState.errorMessages],
+        levers: { ...gameState.levers }
+      };
+    case ROLES.TECHNICIAN:
+      return {
+        gamePhase, startTime, endTime,
+        statusLights: { ...gameState.statusLights }
+      };
+    case ROLES.SCIENTIST:
+      return {
+        gamePhase, startTime, endTime,
+        temperature: gameState.temperature,
+        pressure: gameState.pressure,
+        reactorStatus: gameState.reactorStatus
+      };
+    case ROLES.OPERATOR:
+      // Operator sees everything — they are the one who pulls the trigger
+      return {
+        ...gameState,
+        levers: { ...gameState.levers },
+        statusLights: { ...gameState.statusLights },
+        errorMessages: [...gameState.errorMessages]
+      };
+    default:
+      return { gamePhase, startTime, endTime };
+  }
+}
+
+function startGame(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+
+  // Shuffle and assign roles
+  const shuffled = Object.values(ROLES).sort(() => Math.random() - 0.5);
+  room.players.forEach((player, i) => {
+    player.role = shuffled[i];
+    console.log(`Rolle ${player.role} → ${player.nickname}`);
   });
 
-  // Set CORS headers
+  room.gameState = createGameState();
+  room.gameState.gamePhase = 'running';
+  room.gameState.startTime = Date.now();
+
+  // Send each player their own role-filtered view
+  room.players.forEach(player => {
+    io.to(player.id).emit('roleAssigned', {
+      role: player.role,
+      gameState: getRoleSpecificState(room.gameState, player.role)
+    });
+  });
+
+  io.to(roomCode).emit('gameStarted', {
+    players: room.players,
+    gameState: room.gameState
+  });
+
+  console.log(`Spiel in Raum ${roomCode} gestartet`);
+}
+
+function handlePlayerLeave(socket) {
+  if (!socket.roomCode) return;
+  const room = rooms.get(socket.roomCode);
+  if (room) {
+    room.players = room.players.filter(p => p.id !== socket.id);
+    room.lastActivity = Date.now();
+    if (room.players.length === 0) {
+      rooms.delete(socket.roomCode);
+      console.log(`Raum ${socket.roomCode} gelöscht (leer)`);
+    } else {
+      io.to(socket.roomCode).emit('playerLeft', {
+        players: room.players,
+        leftPlayer: { id: socket.id, nickname: socket.nickname }
+      });
+    }
+  }
+  socket.leave(socket.roomCode);
+  delete socket.roomCode;
+  delete socket.nickname;
+}
+
+// CORS middleware
+app.use((req, res, next) => {
   const allowedOrigins = [
     'https://team-game.vercel.app',
     'https://team-game-beta.vercel.app',
     'http://localhost:3000'
   ];
-  
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
-  
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    console.log('Handling OPTIONS request');
-    return res.status(200).end();
-  }
-  
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') return res.status(200).end();
   next();
 });
 
-// Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Add detailed logging middleware
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  console.log('Headers:', req.headers);
-  next();
-});
-
-// Add error logging middleware
-app.use((err, req, res, next) => {
-  console.error('Express error:', err);
-  res.status(500).send('Internal Server Error');
-});
-
-// Add basic routes before socket.io setup
 app.get('/', (req, res) => {
-  console.log('Root route accessed');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/health', (req, res) => {
-  console.log('Health check accessed');
   res.status(200).send('OK');
+});
+
+app.use((err, req, res, next) => {
+  console.error('Express error:', err);
+  res.status(500).send('Internal Server Error');
 });
 
 const io = socketIo(server, {
@@ -216,144 +256,96 @@ const io = socketIo(server, {
   }
 });
 
-// Add detailed Socket.IO logging
+// Game tick — runs every TICK_INTERVAL_MS for all active rooms
+setInterval(() => {
+  for (const [roomCode, room] of rooms.entries()) {
+    if (!room.gameState || room.gameState.gamePhase !== 'running') continue;
+
+    const state = room.gameState;
+
+    // Time-limit failure
+    if (Date.now() - state.startTime > GAME_DURATION_MS) {
+      state.gamePhase = 'failed';
+      state.endTime = Date.now();
+    } else {
+      updateGameState(roomCode);
+    }
+
+    room.players.forEach(player => {
+      io.to(player.id).emit('gameStateUpdate', {
+        gameState: getRoleSpecificState(room.gameState, player.role)
+      });
+    });
+  }
+}, TICK_INTERVAL_MS);
+
 io.engine.on('connection_error', (err) => {
-  console.error('Socket.IO connection error:', {
-    message: err.message,
-    description: err.description,
-    type: err.type,
-    context: err.context
-  });
-});
-
-io.engine.on('initial_headers', (headers, req) => {
-  console.log('Socket.IO initial headers:', headers);
-  console.log('Socket.IO request headers:', req.headers);
-});
-
-io.engine.on('headers', (headers, req) => {
-  console.log('Socket.IO headers:', headers);
-});
-
-// Add error handling
-io.on('connect_error', (error) => {
-  console.error('Connection error:', error);
+  console.error('Socket.IO connection error:', err.message);
 });
 
 io.on('connection', (socket) => {
-  console.log('Ein Spieler hat sich verbunden:', socket.id);
-  console.log('Transport:', socket.conn.transport.name);
-  
-  // Raum erstellen
+  console.log('Spieler verbunden:', socket.id);
+
   socket.on('createRoom', (nickname) => {
     try {
-      console.log('Create room request received from:', socket.id);
-      console.log('Nickname:', nickname);
-      
-      if (!nickname || typeof nickname !== 'string') {
-        console.log('Error: Invalid nickname');
+      if (!nickname || typeof nickname !== 'string' || !nickname.trim()) {
         socket.emit('createRoomResponse', { success: false, error: 'Ungültiger Nickname' });
         return;
       }
-
       const roomCode = generateRoomCode();
-      const roomData = {
-        players: [{ id: socket.id, nickname, role: null }],
+      rooms.set(roomCode, {
+        players: [{ id: socket.id, nickname: nickname.trim(), role: null }],
         lastActivity: Date.now(),
         createdAt: Date.now(),
-        gameState: { ...gameState }
-      };
-      
-      rooms.set(roomCode, roomData);
+        gameState: createGameState()
+      });
       socket.join(roomCode);
       socket.roomCode = roomCode;
-      socket.nickname = nickname;
-      
-      console.log(`Raum ${roomCode} wurde erstellt von ${nickname}`);
-      
-      // Send response as a separate event
-      const response = { success: true, roomCode };
-      console.log('Sending response:', response);
-      socket.emit('createRoomResponse', response);
+      socket.nickname = nickname.trim();
+      console.log(`Raum ${roomCode} erstellt von ${nickname}`);
+      socket.emit('createRoomResponse', { success: true, roomCode });
     } catch (error) {
       console.error('Error in createRoom:', error);
       socket.emit('createRoomResponse', { success: false, error: 'Interner Serverfehler' });
     }
   });
 
-  // Raum beitreten
   socket.on('joinRoom', ({ roomCode, nickname }) => {
     try {
-      console.log('Join room request received:', { roomCode, nickname });
       const room = rooms.get(roomCode);
-      
       if (!room) {
-        console.log('Room not found:', roomCode);
         socket.emit('joinRoomResponse', { success: false, error: 'Raum nicht gefunden' });
         return;
       }
-
-      if (room.players.some(p => p.nickname === nickname)) {
-        console.log('Nickname already taken:', nickname);
+      if (!nickname || typeof nickname !== 'string' || !nickname.trim()) {
+        socket.emit('joinRoomResponse', { success: false, error: 'Ungültiger Nickname' });
+        return;
+      }
+      if (room.players.some(p => p.nickname === nickname.trim())) {
         socket.emit('joinRoomResponse', { success: false, error: 'Nickname bereits vergeben' });
         return;
       }
-
       if (room.players.length >= 4) {
-        console.log('Room is full:', roomCode);
         socket.emit('joinRoomResponse', { success: false, error: 'Raum ist voll' });
         return;
       }
 
-      room.players.push({ id: socket.id, nickname, role: null });
+      room.players.push({ id: socket.id, nickname: nickname.trim(), role: null });
       room.lastActivity = Date.now();
-      
       socket.join(roomCode);
       socket.roomCode = roomCode;
-      socket.nickname = nickname;
+      socket.nickname = nickname.trim();
 
-      console.log(`Player ${nickname} joined room ${roomCode}`);
-      console.log('Players in room:', room.players.length);
+      // Send roomCode back so the client doesn't need to track it separately
+      socket.emit('joinRoomResponse', { success: true, players: room.players, roomCode });
 
-      // Send success response
-      socket.emit('joinRoomResponse', { success: true, players: room.players });
-
-      // Informiere alle Spieler im Raum
       io.to(roomCode).emit('playerJoined', {
         players: room.players,
-        newPlayer: { id: socket.id, nickname }
+        newPlayer: { id: socket.id, nickname: nickname.trim() }
       });
 
-      // If we now have exactly 4 players, start the game
       if (room.players.length === 4) {
-        console.log('Starting game in room:', roomCode);
-        
-        // Rollen zufällig verteilen
-        const roles = Object.values(ROLES);
-        room.players.forEach(player => {
-          const randomIndex = Math.floor(Math.random() * roles.length);
-          player.role = roles.splice(randomIndex, 1)[0];
-          console.log(`Assigned role ${player.role} to player ${player.nickname}`);
-        });
-
-        // Spielzustand initialisieren
-        room.gameState = { ...gameState };
-        room.gameState.gamePhase = 'running';
-        room.gameState.startTime = Date.now();
-
-        // Spieler über ihre Rollen informieren
-        room.players.forEach(player => {
-          io.to(player.id).emit('roleAssigned', {
-            role: player.role,
-            gameState: getRoleSpecificState(room.gameState, player.role)
-          });
-        });
-
-        // Allen Spielern den aktualisierten Spieler-Status senden
-        io.to(roomCode).emit('gameStarted', {
-          players: room.players,
-          gameState: room.gameState
-        });
+        startGame(roomCode);
       }
     } catch (error) {
       console.error('Error in joinRoom:', error);
@@ -361,240 +353,108 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Spiel starten
-  socket.on('startGame', (callback) => {
-    try {
-      console.log('Start game request received from:', socket.id);
-      console.log('Current room:', socket.roomCode);
-      
-      if (!socket.roomCode) {
-        console.log('Error: Player not in a room');
-        if (typeof callback === 'function') {
-          callback({ success: false, error: 'Nicht in einem Raum' });
-        }
-        return;
-      }
-
-      const room = rooms.get(socket.roomCode);
-      if (!room) {
-        console.log('Error: Room not found');
-        if (typeof callback === 'function') {
-          callback({ success: false, error: 'Raum nicht gefunden' });
-        }
-        return;
-      }
-
-      console.log('Players in room:', room.players.length);
-      if (room.players.length !== 4) {
-        console.log('Error: Not enough players');
-        if (typeof callback === 'function') {
-          callback({ success: false, error: 'Genau 4 Spieler benötigt' });
-        }
-        return;
-      }
-
-      // Rollen zufällig verteilen
-      const roles = Object.values(ROLES);
-      room.players.forEach(player => {
-        const randomIndex = Math.floor(Math.random() * roles.length);
-        player.role = roles.splice(randomIndex, 1)[0];
-        console.log(`Assigned role ${player.role} to player ${player.nickname}`);
-      });
-
-      // Spielzustand initialisieren
-      room.gameState = { ...gameState };
-      room.gameState.gamePhase = 'running';
-      room.gameState.startTime = Date.now();
-
-      // Spieler über ihre Rollen informieren
-      room.players.forEach(player => {
-        io.to(player.id).emit('roleAssigned', {
-          role: player.role,
-          gameState: getRoleSpecificState(room.gameState, player.role)
-        });
-      });
-
-      // Allen Spielern den aktualisierten Spieler-Status senden
-      io.to(socket.roomCode).emit('gameStarted', {
-        players: room.players,
-        gameState: room.gameState
-      });
-
-      if (typeof callback === 'function') {
-        callback({ success: true });
-      }
-      console.log(`Spiel in Raum ${socket.roomCode} gestartet`);
-    } catch (error) {
-      console.error('Error in startGame:', error);
-      if (typeof callback === 'function') {
-        callback({ success: false, error: 'Interner Serverfehler' });
-      }
-    }
-  });
-
-  // Hebel umschalten
   socket.on('toggleLever', ({ lever }, callback) => {
+    if (typeof callback !== 'function') return;
+
     if (!socket.roomCode) {
       callback({ success: false, error: 'Nicht in einem Raum' });
       return;
     }
-
     const room = rooms.get(socket.roomCode);
-    if (!room || !room.gameState) {
+    if (!room || !room.gameState || room.gameState.gamePhase !== 'running') {
       callback({ success: false, error: 'Spiel nicht aktiv' });
       return;
     }
-
+    if (!VALID_LEVERS.has(lever)) {
+      callback({ success: false, error: 'Ungültiger Hebel' });
+      return;
+    }
     const player = room.players.find(p => p.id === socket.id);
+    if (!player) {
+      callback({ success: false, error: 'Spieler nicht gefunden' });
+      return;
+    }
     if (player.role !== ROLES.ENGINEER) {
       callback({ success: false, error: 'Nur der Ingenieur kann Hebel umschalten' });
       return;
     }
 
     room.gameState.levers[lever] = !room.gameState.levers[lever];
+    room.lastActivity = Date.now();
     const updatedState = updateGameState(socket.roomCode);
 
-    // Allen Spielern den aktualisierten Zustand senden
-    room.players.forEach(player => {
-      io.to(player.id).emit('gameStateUpdate', {
-        gameState: getRoleSpecificState(updatedState, player.role)
+    room.players.forEach(p => {
+      io.to(p.id).emit('gameStateUpdate', {
+        gameState: getRoleSpecificState(updatedState, p.role)
       });
     });
 
     callback({ success: true });
   });
 
-  // Finale Aktion ausführen
-  socket.on('executeFinalAction', ({ action }, callback) => {
+  // Operator-only action — wins the game if reactor is in the safe zone
+  socket.on('executeFinalAction', (data, callback) => {
+    if (typeof callback !== 'function') return;
+
     if (!socket.roomCode) {
       callback({ success: false, error: 'Nicht in einem Raum' });
       return;
     }
-
     const room = rooms.get(socket.roomCode);
-    if (!room || !room.gameState) {
+    if (!room || !room.gameState || room.gameState.gamePhase !== 'running') {
       callback({ success: false, error: 'Spiel nicht aktiv' });
       return;
     }
-
     const player = room.players.find(p => p.id === socket.id);
+    if (!player) {
+      callback({ success: false, error: 'Spieler nicht gefunden' });
+      return;
+    }
     if (player.role !== ROLES.OPERATOR) {
       callback({ success: false, error: 'Nur der Operator kann finale Aktionen ausführen' });
       return;
     }
 
-    // Hier können finale Aktionen implementiert werden
-    // z.B. PIN-Eingabe, Knopfdruckreihenfolge, etc.
+    const state = room.gameState;
+    const inSafeZone = state.temperature >= 30 && state.temperature <= 80 &&
+                       state.pressure >= 30 && state.pressure <= 70;
+
+    if (!inSafeZone) {
+      callback({ success: false, error: 'Reaktor noch nicht im sicheren Bereich' });
+      return;
+    }
+
+    state.gamePhase = 'completed';
+    state.endTime = Date.now();
+
+    room.players.forEach(p => {
+      io.to(p.id).emit('gameStateUpdate', {
+        gameState: getRoleSpecificState(state, p.role)
+      });
+    });
 
     callback({ success: true });
   });
 
-  // Spieler verlässt den Raum
-  socket.on('leaveRoom', () => {
-    if (socket.roomCode) {
-      const room = rooms.get(socket.roomCode);
-      if (room) {
-        room.players = room.players.filter(p => p.id !== socket.id);
-        room.lastActivity = Date.now();
-
-        if (room.players.length === 0) {
-          rooms.delete(socket.roomCode);
-          console.log(`Raum ${socket.roomCode} wurde gelöscht (leer)`);
-        } else {
-          io.to(socket.roomCode).emit('playerLeft', {
-            players: room.players,
-            leftPlayer: { id: socket.id, nickname: socket.nickname }
-          });
-        }
-      }
-      socket.leave(socket.roomCode);
-      delete socket.roomCode;
-      delete socket.nickname;
-    }
-  });
+  socket.on('leaveRoom', () => handlePlayerLeave(socket));
 
   socket.on('disconnect', (reason) => {
-    console.log('Ein Spieler hat die Verbindung getrennt:', socket.id);
-    console.log('Disconnect reason:', reason);
-    
-    // Behandle das Verlassen des Raums beim Disconnect
-    if (socket.roomCode) {
-      const room = rooms.get(socket.roomCode);
-      if (room) {
-        room.players = room.players.filter(p => p.id !== socket.id);
-        room.lastActivity = Date.now();
-
-        if (room.players.length === 0) {
-          rooms.delete(socket.roomCode);
-          console.log(`Raum ${socket.roomCode} wurde gelöscht (leer)`);
-        } else {
-          io.to(socket.roomCode).emit('playerLeft', {
-            players: room.players,
-            leftPlayer: { id: socket.id, nickname: socket.nickname }
-          });
-        }
-      }
-    }
+    console.log('Spieler getrennt:', socket.id, '—', reason);
+    handlePlayerLeave(socket);
   });
 
-  // Add ping/pong for connection health check
-  socket.on('ping', () => {
-    socket.emit('pong');
-  });
+  socket.on('ping', () => socket.emit('pong'));
 });
 
-// Hilfsfunktion für rollenspezifische Spielzustände
-function getRoleSpecificState(gameState, role) {
-  const state = { ...gameState };
-  
-  switch (role) {
-    case ROLES.ENGINEER:
-      // Ingenieur sieht Fehlermeldungen und Hebel-Status
-      return {
-        ...state,
-        errorMessages: state.errorMessages,
-        levers: state.levers
-      };
-    
-    case ROLES.TECHNICIAN:
-      // Techniker sieht Statusleuchten
-      return {
-        ...state,
-        statusLights: state.statusLights
-      };
-    
-    case ROLES.SCIENTIST:
-      // Wissenschaftler sieht Live-Daten
-      return {
-        ...state,
-        temperature: state.temperature,
-        pressure: state.pressure,
-        reactorStatus: state.reactorStatus
-      };
-    
-    case ROLES.OPERATOR:
-      // Operator sieht alles, aber kann nur finale Aktionen ausführen
-      return state;
-    
-    default:
-      return state;
-  }
-}
-
-// Add a catch-all route for undefined routes
 app.use((req, res) => {
-  console.log('Undefined route accessed:', req.url);
   res.status(404).send('Route not found');
 });
 
-// Add error handling for the server
 server.on('error', (error) => {
   console.error('Server error:', error);
 });
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server läuft auf Port ${PORT}`);
-  console.log(`Health check available at: http://localhost:${PORT}/health`);
-  console.log(`Root endpoint available at: http://localhost:${PORT}/`);
-  console.log(`Static files directory: ${path.join(__dirname, 'public')}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
 });
